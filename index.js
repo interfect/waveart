@@ -129,11 +129,11 @@ const vertWireframeWave = glsl`
   
   void main () {
     mat4 proj_combined = proj * view;
-    vec4 p = proj_combined*vec4(wavify(position, time / 60.0), 1);
-    vec4 n = proj_combined*vec4(wavify(nextpos, time / 60.0), 1);
+    vec4 p = proj_combined * vec4(wavify(position, time / 60.0), 1);
+    vec4 n = proj_combined * vec4(wavify(nextpos, time / 60.0), 1);
     vec4 offset = linevoffset(p, n, direction, aspect);
     // Just do normal wireframe
-    gl_Position = p + offset*0.02;
+    gl_Position = p + offset * 0.02;
     
   }
 `
