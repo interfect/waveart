@@ -92,6 +92,52 @@ const vertWireframe = glsl`
   }
 `
 
+// This shader does substack's screen-projected-lines wireframe but also waves
+const vertWireframeWave = glsl`
+  precision mediump float;
+  
+  #pragma glslify: linevoffset = require('screen-projected-lines')
+  
+  // Camera stuff
+  uniform mat4 proj;
+  uniform mat4 model;
+  uniform mat4 view;
+  
+  // We need the screen aspect ratio
+  uniform float aspect;
+  
+  attribute vec3 position;
+  
+  // We also need the position of the "next" vertex to draw a line to
+  attribute vec3 nextpos;
+  
+  // And a float describing the direction to it (?)
+  attribute float direction;
+  
+  // And we account for time
+  uniform float time;
+  
+  // We can do waves based on local position
+  vec3 wavify(in vec3 pos) {
+    return vec3(pos.x, pos.y + sin(pos.x), pos.z);
+  }
+  
+  // We can also do waves based on local position and time
+  vec3 wavify(in vec3 pos, in float t) {
+    return vec3(pos.x, pos.y + sin(pos.x + t), pos.z);
+  }
+  
+  void main () {
+    mat4 proj_combined = proj * view;
+    vec4 p = proj_combined*vec4(wavify(position, time / 60.0), 1);
+    vec4 n = proj_combined*vec4(wavify(nextpos, time / 60.0), 1);
+    vec4 offset = linevoffset(p, n, direction, aspect);
+    // Just do normal wireframe
+    gl_Position = p + offset*0.02;
+    
+  }
+`
+
 
 function createOcean() {
   // Define a grid
@@ -110,7 +156,7 @@ function createOcean() {
   // Define the draw to do and return it
   return regl({
     frag: fragSolid,
-    vert: vertWireframe,
+    vert: vertWireframeWave,
     // Copy all the wireframe stuff over
     attributes: {
       position: mesh.positions,
@@ -120,6 +166,7 @@ function createOcean() {
     elements: mesh.cells,
     uniforms: {
       color: [0, 0.7, 0.8, 1],
+      time: ({tick}) => { return tick },
       // Use a matrix stack ripped from the documentation.
       // This is how we stick the image into our window as a function of window size.
       proj: ({viewportWidth, viewportHeight}) =>
@@ -132,7 +179,7 @@ function createOcean() {
       model: mat4.identity([]),
       // This is the camera matrix. It's the spinny one from the documentation, modified to spin gooder
       view: ({tick}) => {
-        const t = 0.01 * tick
+        const t = 0.001 * tick
         const radius = 10
         const height = 2.5
         const center = [5, 0, 5]
