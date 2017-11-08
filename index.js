@@ -7,6 +7,40 @@ const mat4 = require('gl-mat4')
 var grid = require('grid-mesh')
 var wireframe = require('screen-projected-lines')
 
+// Define shome shaders
+
+// This fragment shader makes a cool screen-space color noise
+const fragRainbow = glsl`
+  // We need this or webgl freaks the fuck out  
+  precision mediump float;
+
+  // Grab a cool noise
+  #pragma glslify: noise = require('glsl-noise/simplex/2d')
+  
+  uniform vec4 color;
+  
+  void main () {
+    gl_FragColor = vec4(
+      noise(vec2(gl_FragCoord.x * 0.01, gl_FragCoord.y * 0.01)) * 0.5 + 0.5,
+      noise(vec2(gl_FragCoord.y * 0.01, gl_FragCoord.x * 0.01)) * 0.5 + 0.5,
+      noise(vec2(10.0 + gl_FragCoord.x * 0.01, 10.0 + gl_FragCoord.y * 0.01)) * 0.5 + 0.5,
+      1);
+  }
+`
+
+// This fragment shader makes a solid color
+const fragSolid = glsl`
+  // We need this or webgl freaks the fuck out  
+  precision mediump float;
+
+  uniform vec4 color;
+  
+  void main () {
+    gl_FragColor = color;
+  }
+`
+
+
 function createOcean() {
   // Define a grid
   const size = 10;
@@ -19,27 +53,9 @@ function createOcean() {
   })
   const cells = mesh.cells
   
-  console.log(positions, cells)
-  
   // Define the draw to do and return it
   return regl({
-    frag: glsl`
-      // We need this or webgl freaks the fuck out  
-      precision mediump float;
-    
-      // Grab a cool noise
-      #pragma glslify: noise = require('glsl-noise/simplex/2d')
-      
-      uniform vec4 color;
-      
-      void main () {
-        gl_FragColor = vec4(
-          noise(vec2(gl_FragCoord.x * 0.01, gl_FragCoord.y * 0.01)),
-          noise(vec2(gl_FragCoord.y * 0.01, gl_FragCoord.x * 0.01)),
-          noise(vec2(10.0 + gl_FragCoord.x * 0.01, 10.0 + gl_FragCoord.y * 0.01)),
-          1);
-      }
-    `,
+    frag: fragSolid,
     vert: glsl`
       precision mediump float;
       
@@ -51,7 +67,10 @@ function createOcean() {
       attribute vec3 position;
       
       void main () {
-        gl_Position = proj * view * model * vec4(position, 1);
+        // Apply a sin wave to the mesh
+        vec3 modPos = vec3(position.x, position.y, position.z + sin(position.x));
+        // Then apply the transform
+        gl_Position = proj * view * model * vec4(modPos, 1);
       }
     `,
     attributes: {
@@ -74,13 +93,13 @@ function createOcean() {
       // This is the camera matrix. It's the spinny one from the documentation.
       view: ({tick}) => {
         const t = 0.01 * tick
-        const radius = 3;
-        const height = 2.5
+        const radius = 20;
+        const height = 10
         return mat4.lookAt([],
           // Here is our eye
           [radius * Math.cos(t), height, radius * Math.sin(t)],
           // Here is where we look
-          [0, height, 0],
+          [0, 5, 0],
           // This is up
           [0, 1, 0])
       }
