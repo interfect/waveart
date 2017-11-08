@@ -1,0 +1,29 @@
+{
+  "name": "waveart",
+  "version": "1.0.0",
+  "description": "Cool Wave Art",
+  "main": "index.js",
+  "scripts": {
+    "build": "browserify index.js > build/bundle.js",
+    "watch": "watchify index.js -o build/bundle.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/interfect/waveart.git"
+  },
+  "author": "Adam Novak",
+  "license": "MIT",
+  "dependencies": {
+    "gl-mat4": "^1.1.4",
+    "glsl-noise": "0.0.0",
+    "glslify": "^6.1.0",
+    "grid-mesh": "^0.1.0",
+    "regl": "^1.3.0",
+    "screen-projected-lines": "^1.2.0"
+  },
+  "browserify": {
+    "transform": [
+      "glslify"
+    ]
+  }
+}
