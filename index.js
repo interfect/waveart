@@ -188,7 +188,9 @@ function now() {
   return new Date().getTime() / 1000 - art_start
 }
 
-
+function rand(low, high) {
+  return low + Math.random() * (high - low);
+}
 
 // Make a renderer that draws an ocean
 function createOcean(size) {
@@ -253,18 +255,15 @@ function createOcean(size) {
   }
   
   for (let i = 0; i < MAX_WAVES; i++) {
-    // Create empty wave uniforms
-    options.uniforms['xwaves[' + i + ']'] = [0, 0, 0, 0]
-    options.uniforms['zwaves[' + i + ']'] = [0, 0, 0, 0]
-    // No wavelet bounds
-    options.uniforms['xwavelets[' + i + ']'] = [0, 0, 0, 0]
-    options.uniforms['zwavelets[' + i + ']'] = [0, 0, 0, 0]
+    // Create random wave uniforms
+    options.uniforms['xwaves[' + i + ']'] = [rand(0, 0.5), rand(0.3, 0.6), rand(0.5, 1.0), rand(0, 1)]
+    options.uniforms['zwaves[' + i + ']'] = [rand(0, 0.5), rand(0.3, 0.6), rand(0.5, 1.0), rand(0, 1)]
+    // Add random bounds
+    options.uniforms['xwavelets[' + i + ']'] = [rand(0, 5), rand(45, 50), 0, 0]
+    options.uniforms['zwavelets[' + i + ']'] = [rand(0, 5), rand(45, 50), 0, 0]
   }
   
-  // Set up a simple wavelet
-  options.uniforms['zwaves[0]'] = [1, 1, 0, 0]
-  // It is in this region of space and time.
-  options.uniforms['zwavelets[0]'] = [2, 30, 3, 10]
+  
   
   return regl(options);
 }
