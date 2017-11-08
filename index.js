@@ -117,20 +117,30 @@ const vertWireframeWave = glsl`
   // And we account for time
   uniform float time;
   
-  // We can do waves based on local position
-  vec3 wavify(in vec3 pos) {
-    return vec3(pos.x, pos.y + sin(pos.x), pos.z);
+  // We take some uniform amplitude, space frequency, time frequency, phase parameters
+  uniform vec4 xwaves[3];
+  uniform vec4 zwaves[3];
+  
+  // We have a function to compute a single wave
+  float wave(in vec4 params, in float pos, in float t) {
+    return params.x * cos(params.y * pos + params.z * t + params.w);
   }
   
   // We can also do waves based on local position and time
   vec3 wavify(in vec3 pos, in float t) {
-    return vec3(pos.x, pos.y + sin(pos.x + t), pos.z);
+    pos.y += wave(xwaves[0], pos.x, t);
+    pos.y += wave(xwaves[1], pos.x, t);
+    pos.y += wave(xwaves[2], pos.x, t);
+    pos.y += wave(zwaves[0], pos.z, t);
+    pos.y += wave(zwaves[1], pos.z, t);
+    pos.y += wave(zwaves[2], pos.z, t);
+    return pos;
   }
   
   void main () {
     mat4 proj_combined = proj * view;
-    vec4 p = proj_combined * vec4(wavify(position, time / 60.0), 1);
-    vec4 n = proj_combined * vec4(wavify(nextpos, time / 60.0), 1);
+    vec4 p = proj_combined * vec4(wavify(position, time), 1);
+    vec4 n = proj_combined * vec4(wavify(nextpos, time), 1);
     vec4 offset = linevoffset(p, n, direction, aspect);
     // Just do normal wireframe
     gl_Position = p + offset * 0.02;
@@ -138,10 +148,19 @@ const vertWireframeWave = glsl`
   }
 `
 
+// When did we start the art?
+const art_start = new Date().getTime() / 1000
 
-function createOcean() {
+// Get the time in seconds since start of art
+function now() {
+  return new Date().getTime() / 1000 - art_start
+}
+
+
+
+// Make a renderer that draws an ocean
+function createOcean(size) {
   // Define a grid
-  const size = 10;
   var mesh = grid(size, size)
 
   // Convert mesh from 2d to 3d
@@ -166,7 +185,14 @@ function createOcean() {
     elements: mesh.cells,
     uniforms: {
       color: [0, 0.7, 0.8, 1],
-      time: ({tick}) => { return tick },
+      time: () => { return now() },
+      // The actual wave parameters (amplitude, space frequency, time frequency, phase)
+      'xwaves[0]': [1, 1, 1, 1],
+      'xwaves[1]': [1, 1.1, 1, 1],
+      'xwaves[2]': [1, 0.5, 0.98, 2],
+      'zwaves[0]': [1, 0.3, 1.01, 0],
+      'zwaves[1]': [0.3, 0.1, 0.1, 1],
+      'zwaves[2]': [0.9, 0.99, 0.97, 0],
       // Use a matrix stack ripped from the documentation.
       // This is how we stick the image into our window as a function of window size.
       proj: ({viewportWidth, viewportHeight}) =>
@@ -180,9 +206,9 @@ function createOcean() {
       // This is the camera matrix. It's the spinny one from the documentation, modified to spin gooder
       view: ({tick}) => {
         const t = 0.001 * tick
-        const radius = 10
-        const height = 2.5
-        const center = [5, 0, 5]
+        const radius = 25
+        const height = 5
+        const center = [25, 0, 25]
         return mat4.lookAt([],
           // Here is our eye
           [center[0] + radius * Math.cos(t), center[1] + height, center[2] + radius * Math.sin(t)],
@@ -200,7 +226,7 @@ function createOcean() {
 }
 
 // Create the drawing function
-const drawOcean = createOcean();
+const drawOcean = createOcean(50);
 
 regl.frame(() => {
   regl.clear({
