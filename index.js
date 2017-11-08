@@ -4,8 +4,8 @@
 const regl = require('regl')()
 const glsl = require('glslify')
 const mat4 = require('gl-mat4')
-var grid = require('grid-mesh')
-var wireframe = require('screen-projected-lines')
+let grid = require('grid-mesh')
+let wireframe = require('screen-projected-lines')
 
 // Define shome shaders
 
@@ -98,6 +98,11 @@ const vertWireframeWave = glsl`
   
   #pragma glslify: linevoffset = require('screen-projected-lines')
   
+  // How many waves in each axis do we support?
+  #define MAX_WAVES 8
+  // What even is pi?
+  #define PI 3.1415926535897932384626433832795
+  
   // Camera stuff
   uniform mat4 proj;
   uniform mat4 model;
@@ -118,22 +123,49 @@ const vertWireframeWave = glsl`
   uniform float time;
   
   // We take some uniform amplitude, space frequency, time frequency, phase parameters
-  uniform vec4 xwaves[3];
-  uniform vec4 zwaves[3];
+  // Waves that aren't used are all 0.
+  uniform vec4 xwaves[MAX_WAVES];
+  uniform vec4 zwaves[MAX_WAVES];
+  
+  // We also have wavelet parameters (bounds in space (x, y) and bounds in time
+  // (z, w)) we can use with a cosine envelope to make local things. We use a
+  // sin envelope. Zeros disable.
+  uniform vec4 xwavelets[MAX_WAVES];
+  uniform vec4 zwavelets[MAX_WAVES];
+  
+  // TODO: support wavelets in both space dimensions as well as time.
   
   // We have a function to compute a single wave
   float wave(in vec4 params, in float pos, in float t) {
     return params.x * cos(params.y * pos + params.z * t + params.w);
   }
   
+  // We have a single envelope.
+  float envelope(in float start, in float end, in float pos) {
+    if (start == 0.0 && end == 0.0) {
+      // Deactivated
+      return 1.0;
+    } else if(pos < start || pos > end) {
+      // Out of bounds
+      return 0.0;
+    } else {
+      return sin((pos - start) / (end - start) * PI);
+    }
+  }
+  
+  // We apply this envelope to the wave, doing the two enevlopes in 2d as per the parameters.
+  float wavelet_envelope(in vec4 params, in float pos, in float t) {
+    return envelope(params.x, params.y, pos) * envelope(params.z, params.w, t);
+  }
+  
   // We can also do waves based on local position and time
   vec3 wavify(in vec3 pos, in float t) {
-    pos.y += wave(xwaves[0], pos.x, t);
-    pos.y += wave(xwaves[1], pos.x, t);
-    pos.y += wave(xwaves[2], pos.x, t);
-    pos.y += wave(zwaves[0], pos.z, t);
-    pos.y += wave(zwaves[1], pos.z, t);
-    pos.y += wave(zwaves[2], pos.z, t);
+    for (int i = 0; i < MAX_WAVES; i++) {
+      pos.y += wave(xwaves[i], pos.x, t) * wavelet_envelope(xwavelets[i], pos.x, t);
+    }
+    for (int i = 0; i < MAX_WAVES; i++) {
+      pos.y += wave(zwaves[i], pos.z, t) * wavelet_envelope(zwavelets[i], pos.z, t);
+    }
     return pos;
   }
   
@@ -161,7 +193,7 @@ function now() {
 // Make a renderer that draws an ocean
 function createOcean(size) {
   // Define a grid
-  var mesh = grid(size, size)
+  let mesh = grid(size, size)
 
   // Convert mesh from 2d to 3d
   mesh.positions = mesh.positions.map((vec2) => {
@@ -172,8 +204,11 @@ function createOcean(size) {
   // Wireframe it for screen-projected-lines
   mesh = wireframe(mesh)
   
-  // Define the draw to do and return it
-  return regl({
+  // How many waves does the shader allow?
+  const MAX_WAVES = 8;
+  
+  // Define the draw to do
+  let options = {
     frag: fragSolid,
     vert: vertWireframeWave,
     // Copy all the wireframe stuff over
@@ -186,13 +221,6 @@ function createOcean(size) {
     uniforms: {
       color: [0, 0.7, 0.8, 1],
       time: () => { return now() },
-      // The actual wave parameters (amplitude, space frequency, time frequency, phase)
-      'xwaves[0]': [1, 1, 1, 1],
-      'xwaves[1]': [1, 1.1, 1, 1],
-      'xwaves[2]': [1, 0.5, 0.98, 2],
-      'zwaves[0]': [1, 0.3, 1.01, 0],
-      'zwaves[1]': [0.3, 0.1, 0.1, 1],
-      'zwaves[2]': [0.9, 0.99, 0.97, 0],
       // Use a matrix stack ripped from the documentation.
       // This is how we stick the image into our window as a function of window size.
       proj: ({viewportWidth, viewportHeight}) =>
@@ -222,7 +250,23 @@ function createOcean(size) {
         return viewportWidth / viewportHeight
       }
     }
-  })
+  }
+  
+  for (let i = 0; i < MAX_WAVES; i++) {
+    // Create empty wave uniforms
+    options.uniforms['xwaves[' + i + ']'] = [0, 0, 0, 0]
+    options.uniforms['zwaves[' + i + ']'] = [0, 0, 0, 0]
+    // No wavelet bounds
+    options.uniforms['xwavelets[' + i + ']'] = [0, 0, 0, 0]
+    options.uniforms['zwavelets[' + i + ']'] = [0, 0, 0, 0]
+  }
+  
+  // Set up a simple wavelet
+  options.uniforms['zwaves[0]'] = [1, 1, 0, 0]
+  // It is in this region of space and time.
+  options.uniforms['zwavelets[0]'] = [2, 30, 3, 10]
+  
+  return regl(options);
 }
 
 // Create the drawing function
