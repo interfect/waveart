@@ -4,8 +4,9 @@
 const regl = require('regl')()
 const glsl = require('glslify')
 const mat4 = require('gl-mat4')
-let grid = require('grid-mesh')
-let wireframe = require('screen-projected-lines')
+const grid = require('grid-mesh')
+const wireframe = require('screen-projected-lines')
+const rng = require('random-seed').create()
 
 // Define shome shaders
 
@@ -249,8 +250,12 @@ function now() {
   return new Date().getTime() / 1000 - art_start
 }
 
+// Seed the RNG
+rng.seed("Making Waves")
+
+// And provide shorthand to query it
 function rand(low, high) {
-  return low + Math.random() * (high - low);
+  return rng.floatBetween(low, high)
 }
 
 // Make a renderer that draws an ocean
