@@ -159,6 +159,38 @@ const vertWireframeWave = glsl`
   }
 `
 
+// We need a fragment shader that draws a buffer or texture fullscreen in 2d
+const fragFullscreenFbo = `
+  precision mediump float;
+  
+  // We get the UV from the vertex shader
+  varying vec2 uv;
+  
+  // The texture we draw is given as "texture"
+  uniform sampler2D texture;
+  
+  void main() {
+    gl_FragColor = vec4(texture2D(texture, uv).xyz, 1.0);
+  }
+`
+
+// We need a vertex shader for drawing a buffer or texture fullscreen in 2d.
+const vertFullscreenFbo = glsl`
+  precision mediump float;
+  
+  // The position will come in in 2d and may be outside of -1 to 1 but will be in screen coordinates already.
+  attribute vec2 position;
+  
+  // We pass the UV through to the fragment shader. It runs from 0 to 1 in each dimension within the screen.
+  // We'll be interpolating between the actual points we do to make that happen.
+  varying vec2 uv;
+  
+  void main() {
+    gl_Position = vec4(position, 0.0, 1.0);
+    uv = (position + 1.0) / 2.0;
+  }
+`
+
 // When did we start the art?
 const art_start = new Date().getTime() / 1000
 
@@ -265,13 +297,61 @@ function createOcean(size) {
 // Create the drawing function
 const drawOcean = createOcean(50);
 
-regl.frame(() => {
+// Create a frame buffer to postprocess later. See <https://github.com/regl-project/regl/blob/gh-pages/example/blur.js>
+const fbo = regl.framebuffer({
+  color: regl.texture({
+    width: 1,
+    height: 1,
+    wrap: 'clamp'
+  }),
+  depth: true
+})
+
+// And we define a regl thing to use it.
+const withFbo = regl({
+  framebuffer: fbo
+})
+
+const drawFboProcessed = regl({
+  frag: fragFullscreenFbo,
+  vert: vertFullscreenFbo,
+  // We just draw a big triangle so we get to cover the whole screen.
+  attributes: {
+    position: [ -4, -4,
+                 4, -4,
+                 0,  4 ]
+  },
+  count: 3,
+  uniforms: {
+    // And we draw the buffer as a full-screen texture.
+    texture: fbo,
+  },
+  depth: { enable: false }
+})
+
+regl.frame(({viewportWidth, viewportHeight}) => {
+  // Make the frame buffer the right size
+  fbo.resize(viewportWidth, viewportHeight)
+  
+  // Draw our whole scene to the buffer
+  withFbo({}, () => {
+    // Clear the buffer
+    regl.clear({
+      depth: 1,
+      color: [0, 0, 0, 1]
+    })
+
+    // Draw the ocean every frame
+    drawOcean()
+  })
+  
+  // Clear the actual screen
   regl.clear({
     depth: 1,
     color: [0, 0, 0, 1]
   })
-
-  // Draw the ocean every frame
-  drawOcean()
+  
+  drawFboProcessed()
+  
 })
 
