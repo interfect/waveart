@@ -7,11 +7,6 @@ const mat4 = require('gl-mat4')
 const grid = require('grid-mesh')
 const wireframe = require('screen-projected-lines')
 const rng = require('random-seed').create()
-var vtext = require('vector-text-atlas')
-var vt = vtext({
-  vtext: require('vectorize-text'),
-  cdt: require('cdt2d')
-})
 
 // Define shome shaders
 
@@ -282,68 +277,6 @@ function rand(low, high) {
   return rng.floatBetween(low, high)
 }
 
-// Make a renderer that draws the text
-function createText(text) {
-
-  // Make some text
-  vt.add(text)
-  // Immediately get the mesh
-  let mesh = vt.fill([{text: text}])
-  
-  // Convert mesh from 2d to 3d
-  mesh.positions = mesh.positions.map((vec2) => {
-    // Put the mesh in the XY plane; Z is depth.
-    return [vec2[0], vec2[1], 0]
-  })
-  
-  console.log(mesh.positions)
-
-  // Decide where the model lives.
-  // The model is going to be at the center of the scene (25, 0, 25)
-  var model = mat4.create()
-  mat4.translate(model, model, [25, 5, 25])
-  mat4.scale(model, model, [10, 10, 10])
-
-  // Say how to draw it
-  const options = {
-    frag: fragSolid,
-    vert: vertNormal,
-    attributes: {
-      position: mesh.positions
-    },
-    elements: mesh.edges,
-    // TODO: share uniforms between this and the ocean somehow
-    uniforms: {
-      color: [1, 1, 1, 1],
-      // Use a matrix stack ripped from the documentation.
-      // This is how we stick the image into our window as a function of window size.
-      proj: ({viewportWidth, viewportHeight}) =>
-        mat4.perspective([],
-          Math.PI / 2,
-          viewportWidth / viewportHeight,
-          0.01,
-          1000),
-      model: model,
-      // This is the camera matrix. It's the spinny one from the documentation, modified to spin gooder
-      view: ({tick}) => {
-        const t = 0.001 * tick
-        const radius = 25
-        const height = 5
-        const center = [25, 0, 25]
-        return mat4.lookAt([],
-          // Here is our eye
-          [center[0] + radius * Math.cos(t), center[1] + height, center[2] + radius * Math.sin(t)],
-          // Here is where we look
-          center,
-          // This is up
-          [0, 1, 0])
-      }
-    }
-  }
-  
-  return regl(options) 
-}
-
 // Make a renderer that draws an ocean
 function createOcean(size) {
   // Define a grid
@@ -435,9 +368,6 @@ function createOcean(size) {
   return regl(options);
 }
 
-// Create a text drawing function
-const drawText = createText("Making Waves")
-
 // Create the ocean drawing function
 const drawOcean = createOcean(50);
 
@@ -487,9 +417,6 @@ regl.frame(({viewportWidth, viewportHeight}) => {
       depth: 1,
       color: [0, 0, 0, 1]
     })
-
-    // Draw the text every frame
-    drawText()
 
     // Draw the ocean every frame
     drawOcean()
