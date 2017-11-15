@@ -28,37 +28,6 @@ const fragRainbow = glsl`
   }
 `
 
-// This fragment shader makes screen-space scanlines
-const fragScanline = glsl`
-  // We need this or webgl freaks the fuck out  
-  precision mediump float;
-  
-  // What even is pi?
-  #define PI 3.1415926535897932384626433832795
-  
-  uniform vec4 color;
-  
-  // We have a soft square wave ish function
-  // See <https://math.stackexchange.com/a/107491>
-  float softwave(float softness, float phase, float freq, float x) {
-    return sqrt((1.0 + pow(softness, 2.0)) / (1.0 + pow(softness * cos(x * freq + phase), 2.0))) * cos(x * freq + phase);
-  }
-  
-  // We combine a couple to get a scanline that's more on than off.
-  float scanline(vec2 pos) {
-    float freq = 1.3;
-    float softness = 2.0;
-    float line = clamp((softwave(softness, 0.0, freq, pos.y) + 1.0) / 2.0 + (softwave(softness, 0.5 * PI, freq, pos.y) + 1.0) / 2.0, 0.0, 1.0) * 0.7 + 0.3;
-    float pixel = clamp((softwave(softness, 0.0, freq, pos.x) + 1.0) / 2.0 + (softwave(softness, 0.5 * PI, freq, pos.x) + 1.0) / 2.0, 0.0, 1.0) * 0.7 + 0.3;
-    
-    return line * pixel;
-  }
-  
-  void main () {
-    gl_FragColor = vec4(color.x, color.y, color.z, color.w * scanline(vec2(gl_FragCoord.x, gl_FragCoord.y)));
-  }
-`
-
 // This fragment shader makes a solid color
 const fragSolid = glsl`
   // We need this or webgl freaks the fuck out  
@@ -154,7 +123,7 @@ const vertWireframeWave = glsl`
     vec4 n = proj_combined * vec4(wavify(nextpos, time), 1);
     vec4 offset = linevoffset(p, n, direction, aspect);
     // Just do normal wireframe
-    gl_Position = p + offset * 0.04;
+    gl_Position = p + offset * 0.02;
     
   }
 `
@@ -171,6 +140,76 @@ const fragFullscreenFbo = `
   
   void main() {
     gl_FragColor = vec4(texture2D(texture, uv).xyz, 1.0);
+  }
+`
+
+// This fragment shader makes screen-space scanlines on an FBO
+const fragFullscreenScanlineFbo = glsl`
+  // We need this or webgl freaks the fuck out  
+  precision mediump float;
+  
+  // What even is pi?
+  #define PI 3.1415926535897932384626433832795
+  
+  // We get the UV from the vertex shader
+  varying vec2 uv;
+  
+  // The texture we draw is given as "texture"
+  uniform sampler2D texture;
+  
+  // How many x and y pixels do we do scanlines for?
+  uniform vec2 scanres;
+  
+  // We have a soft square wave ish function
+  // See <https://math.stackexchange.com/a/107491>
+  float softwave(float softness, float phase, float freq, float x) {
+    return sqrt((1.0 + pow(softness, 2.0)) / (1.0 + pow(softness * cos(x * freq + phase), 2.0))) * cos(x * freq + phase);
+  }
+  
+  // We combine a couple to get a scanline that's more on than off.
+  float scanline(vec2 pos) {
+    float freq = 2.0 * PI; // One wave per unit.
+    float softness = 10.0;
+    
+    float line = clamp((softwave(softness, 0.0, freq, pos.y) + 1.0) / 2.0 + (softwave(softness, 0.5 * PI, freq, pos.y) + 1.0) / 2.0, 0.0, 1.0) * 0.7 + 0.3;
+    float pixel = clamp((softwave(softness, 0.0, freq, pos.x) + 1.0) / 2.0 + (softwave(softness, 0.5 * PI, freq, pos.x) + 1.0) / 2.0, 0.0, 1.0) * 0.7 + 0.3;
+    
+    return line * pixel;
+  }
+  
+  void main () {
+    //gl_FragColor = mix(vec4(0.0, 0.0, 0.0, 1.0), vec4(texture2D(texture, uv).xyz, 1.0), scanline(vec2(gl_FragCoord.x, gl_FragCoord.y)));
+    
+    // We need to scale the 0-1 UV coordinate space up to fake pixel value in a pixel space of this size.
+    vec2 scale = scanres;
+    vec2 pixel = vec2(scale.x * uv.x, scale.y * uv.y);
+    
+    // Calculate fake-pixel number and within-fake-pixel position.
+    vec2 fparts = mod(pixel, 1.0);
+    vec2 iparts = floor(pixel);
+    
+    // Calculate iparts as UV
+    vec2 binneduv = iparts / scale;
+    
+    // Do some MSAA
+    vec3 average = vec3(0, 0, 0);
+    int samples = 0;
+    for (int i = -1; i < 2; i++) {
+      for(int j = -1; j < 2; j++) {
+        // Sample 9 points around the center
+        // Make sure we go -0.5, 0, 0.5 also, not -1, 0, 1
+        vec2 offset = vec2(i, j) / (scale * 2.0);
+        
+        average += texture2D(texture, binneduv + offset).xyz;
+        samples += 1;
+        
+      }
+    }
+    average /= float(samples);
+    
+    // Now apply the scanlines
+    // Make sure to align them to pixels since we're working in a pixel-center-at-0.5 regime by default.
+    gl_FragColor = mix(vec4(0.0, 0.0, 0.0, 1.0), vec4(average, 1.0), scanline(pixel + vec2(0.5, 0.5)));
   }
 `
 
@@ -222,7 +261,7 @@ function createOcean(size) {
   
   // Define the draw to do
   let options = {
-    frag: fragScanline,
+    frag: fragSolid,
     vert: vertWireframeWave,
     // Copy all the wireframe stuff over
     attributes: {
@@ -313,7 +352,7 @@ const withFbo = regl({
 })
 
 const drawFboProcessed = regl({
-  frag: fragFullscreenFbo,
+  frag: fragFullscreenScanlineFbo,
   vert: vertFullscreenFbo,
   // We just draw a big triangle so we get to cover the whole screen.
   attributes: {
@@ -325,6 +364,9 @@ const drawFboProcessed = regl({
   uniforms: {
     // And we draw the buffer as a full-screen texture.
     texture: fbo,
+    scanres: ({viewportWidth, viewportHeight}) => {
+      return [viewportWidth / 10.0, viewportHeight / 10.0]
+    }
   },
   depth: { enable: false }
 })
