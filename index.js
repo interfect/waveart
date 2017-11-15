@@ -160,21 +160,33 @@ const fragFullscreenScanlineFbo = glsl`
   // How many x and y pixels do we do scanlines for?
   uniform vec2 scanres;
   
-  // We have a soft square wave ish function
-  // See <https://math.stackexchange.com/a/107491>
-  float softwave(float softness, float phase, float freq, float x) {
-    return sqrt((1.0 + pow(softness, 2.0)) / (1.0 + pow(softness * cos(x * freq + phase), 2.0))) * cos(x * freq + phase);
-  }
-  
-  // We combine a couple to get a scanline that's more on than off.
-  float scanline(vec2 pos) {
-    float freq = 2.0 * PI; // One wave per unit.
-    float softness = 10.0;
-    
-    float line = clamp((softwave(softness, 0.0, freq, pos.y) + 1.0) / 2.0 + (softwave(softness, 0.5 * PI, freq, pos.y) + 1.0) / 2.0, 0.0, 1.0) * 0.7 + 0.3;
-    float pixel = clamp((softwave(softness, 0.0, freq, pos.x) + 1.0) / 2.0 + (softwave(softness, 0.5 * PI, freq, pos.x) + 1.0) / 2.0, 0.0, 1.0) * 0.7 + 0.3;
-    
-    return line * pixel;
+  // Scanline function is based on pixel fparts and is just a simple pattern.
+  float scanline(vec2 fparts) {
+    // Remember, + is up and right.
+    // We do everything on a 1/5 gris
+    if (fparts.x > 0.0 && fparts.x < 0.8) {
+      // In the bright part in x
+      if (fparts.y > 0.0 && fparts.y < 0.8) {
+        if (fparts.y > 0.4) {
+          // Top part is full brightness
+          return 1.0;
+        } else {
+          // Bottom part is lower brightness
+          return 0.7;
+        }
+      } else {
+        // Between rows but in a pixel column is the same as between rows outside of a column.
+        return 0.3;
+      }
+    } else {
+      if (fparts.y > 0.0 && fparts.y < 0.8) {
+        // Between pixels in X but not in Y we're kind of bright
+        return 0.5;
+      } else {
+        // Between pixels in both X and Y we're dark.
+        return 0.3;
+      }
+    }
   }
   
   void main () {
@@ -208,8 +220,7 @@ const fragFullscreenScanlineFbo = glsl`
     average /= float(samples);
     
     // Now apply the scanlines
-    // Make sure to align them to pixels since we're working in a pixel-center-at-0.5 regime by default.
-    gl_FragColor = mix(vec4(0.0, 0.0, 0.0, 1.0), vec4(average, 1.0), scanline(pixel + vec2(0.5, 0.5)));
+    gl_FragColor = mix(vec4(0.0, 0.0, 0.0, 1.0), vec4(average, 1.0), scanline(fparts));
   }
 `
 
@@ -365,7 +376,7 @@ const drawFboProcessed = regl({
     // And we draw the buffer as a full-screen texture.
     texture: fbo,
     scanres: ({viewportWidth, viewportHeight}) => {
-      return [viewportWidth / 10.0, viewportHeight / 10.0]
+      return [viewportWidth / 5.0, viewportHeight / 5.0]
     }
   },
   depth: { enable: false }
