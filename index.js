@@ -28,6 +28,37 @@ const fragRainbow = glsl`
   }
 `
 
+// This fragment shader makes screen-space scanlines
+const fragScanline = glsl`
+  // We need this or webgl freaks the fuck out  
+  precision mediump float;
+  
+  // What even is pi?
+  #define PI 3.1415926535897932384626433832795
+  
+  uniform vec4 color;
+  
+  // We have a soft square wave ish function
+  // See <https://math.stackexchange.com/a/107491>
+  float softwave(float softness, float phase, float freq, float x) {
+    return sqrt((1.0 + pow(softness, 2.0)) / (1.0 + pow(softness * cos(x * freq + phase), 2.0))) * cos(x * freq + phase);
+  }
+  
+  // We combine a couple to get a scanline that's more on than off.
+  float scanline(vec2 pos) {
+    float freq = 1.3;
+    float softness = 2.0;
+    float line = clamp((softwave(softness, 0.0, freq, pos.y) + 1.0) / 2.0 + (softwave(softness, 0.5 * PI, freq, pos.y) + 1.0) / 2.0, 0.0, 1.0) * 0.7 + 0.3;
+    float pixel = clamp((softwave(softness, 0.0, freq, pos.x) + 1.0) / 2.0 + (softwave(softness, 0.5 * PI, freq, pos.x) + 1.0) / 2.0, 0.0, 1.0) * 0.7 + 0.3;
+    
+    return line * pixel;
+  }
+  
+  void main () {
+    gl_FragColor = vec4(color.x, color.y, color.z, color.w * scanline(vec2(gl_FragCoord.x, gl_FragCoord.y)));
+  }
+`
+
 // This fragment shader makes a solid color
 const fragSolid = glsl`
   // We need this or webgl freaks the fuck out  
@@ -37,58 +68,6 @@ const fragSolid = glsl`
   
   void main () {
     gl_FragColor = color;
-  }
-`
-
-// This shader makes things wavy in Y
-const vertWavy = glsl`
-  precision mediump float;
-  
-  // Camera stuff
-  uniform mat4 proj;
-  uniform mat4 model;
-  uniform mat4 view;
-  
-  attribute vec3 position;
-  
-  void main () {
-    // Apply a sin wave to the mesh in y
-    vec3 modPos = vec3(position.x, position.y + sin(position.x), position.z);
-    // Then apply the transform
-    gl_Position = proj * view * model * vec4(modPos, 1);
-  }
-`
-
-// This shader does substack's screen-projected-lines wireframe
-const vertWireframe = glsl`
-  precision mediump float;
-  
-  #pragma glslify: linevoffset = require('screen-projected-lines')
-  
-  // Camera stuff
-  uniform mat4 proj;
-  uniform mat4 model;
-  uniform mat4 view;
-  
-  // We need the screen aspect ratio
-  uniform float aspect;
-  
-  attribute vec3 position;
-  
-  // We also need the position of the "next" vertex to draw a line to
-  attribute vec3 nextpos;
-  
-  // And a float describing the direction to it (?)
-  attribute float direction;
-  
-  void main () {
-    mat4 proj_combined = proj * view;
-    vec4 p = proj_combined*vec4(position, 1);
-    vec4 n = proj_combined*vec4(nextpos, 1);
-    vec4 offset = linevoffset(p, n, direction, aspect);
-    // Just do normal wireframe
-    gl_Position = p + offset*0.02;
-    
   }
 `
 
@@ -175,7 +154,7 @@ const vertWireframeWave = glsl`
     vec4 n = proj_combined * vec4(wavify(nextpos, time), 1);
     vec4 offset = linevoffset(p, n, direction, aspect);
     // Just do normal wireframe
-    gl_Position = p + offset * 0.02;
+    gl_Position = p + offset * 0.04;
     
   }
 `
@@ -211,7 +190,7 @@ function createOcean(size) {
   
   // Define the draw to do
   let options = {
-    frag: fragSolid,
+    frag: fragScanline,
     vert: vertWireframeWave,
     // Copy all the wireframe stuff over
     attributes: {
@@ -251,6 +230,21 @@ function createOcean(size) {
       aspect: ({viewportWidth, viewportHeight}) => {
         return viewportWidth / viewportHeight
       }
+    },
+    // Enable transparency for scanlines
+    blend: {
+      enable: true,
+      func: {
+        srcRGB: 'src alpha',
+        srcAlpha: 1,
+        dstRGB: 'one minus src alpha',
+        dstAlpha: 1
+      },
+      equation: {
+        rgb: 'add',
+        alpha: 'add'
+      },
+      color: [0, 0, 0, 0]
     }
   }
   
