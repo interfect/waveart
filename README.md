@@ -1,4 +1,7 @@
-# Cool Wave Art
+# Reticulating Splines
+An art.
+
+![Screenshot of the art, consisting of the text 'Reticulating Splines" floating as a rainbow outline over a blue wireframe sea.](screenshot.png)
 
 To install:
 
