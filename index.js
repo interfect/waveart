@@ -399,8 +399,9 @@ const drawFboProcessed = regl({
   uniforms: {
     // And we draw the buffer as a full-screen texture.
     texture: fbo,
-    scanres: ({viewportWidth, viewportHeight}) => {
-      return [viewportWidth / 5.0, viewportHeight / 5.0]
+    scanres: ({viewportWidth, viewportHeight, tick}) => {
+      let pixelSize = 3 * (Math.cos(tick/100) + 1)
+      return [viewportWidth / Math.min(Math.max(pixelSize, 1.0), 5.0), viewportHeight / Math.min(Math.max(pixelSize, 1.0), 5.0)]
     }
   },
   depth: { enable: false }
