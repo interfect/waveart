@@ -422,8 +422,8 @@ function createOcean(size) {
       // The model is at the origin
       model: mat4.identity([]),
       // This is the camera matrix. It's the spinny one from the documentation, modified to spin gooder
-      view: ({tick}) => {
-        const t = 0.001 * tick
+      view: () => {
+        const t = 0.05 * now()
         const radius = 25
         const height = 5
         const center = [25, 0, 25]
@@ -520,8 +520,8 @@ function createText(string) {
       // The model is at the center of the scene, which is not the origin. Also
       // move it up, scale it up, and rotate it to face the camera initially and
       // never be mirrored.
-      model: ({tick}) => {
-        const t = 0.001 * tick
+      model: () => {
+        const t = 0.05 * now()
         
         var modelMat = mat4.rotateY([], mat4.scale([], mat4.translate([], mat4.identity([]), [25, 10, 25]), [5, 5, 5]), Math.PI / 2)
         
@@ -536,8 +536,8 @@ function createText(string) {
       },
       // This is the camera matrix. It's the spinny one from the documentation, modified to spin gooder
       // Also modified to fake text spin so we can always read it
-      view: ({tick}) => {
-        const t = 0.001 * tick
+      view: () => {
+        const t = 0.05 * now()
         const radius = 25
         const height = 5
         const center = [25, 0, 25]
