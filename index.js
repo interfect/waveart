@@ -530,7 +530,7 @@ function createText(string) {
       model: () => {
         const t = 0.05 * now()
         
-        var modelMat = mat4.rotateY([], mat4.scale([], mat4.translate([], mat4.identity([]), [25, 10, 25]), [5, 5, 5]), Math.PI / 2)
+        var modelMat = mat4.rotateY([], mat4.scale([], mat4.translate([], mat4.identity([]), [25, 10, 25]), [3, 3, 3]), Math.PI / 2)
         
         // Work out rotation to use to make the text always face not backward
         if ((t + Math.PI / 2) % (2 * Math.PI) > Math.PI) {
@@ -567,7 +567,8 @@ function createText(string) {
   return regl(options)
 }
 
-const drawText = createText("Making Waves")
+// Only certain messages want to draw for some reason.
+const drawText = createText("Reticulating Splines...")
 
 // Create a frame buffer to postprocess later. See <https://github.com/regl-project/regl/blob/gh-pages/example/blur.js>
 const fbo = regl.framebuffer({
