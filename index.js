@@ -180,6 +180,9 @@ const fragFullscreenScanlineFbo = glsl`
   // How many x and y pixels do we do scanlines for?
   uniform vec2 scanres;
   
+  // And we account for time and fade in and out
+  uniform float time;
+  
   // Scanline function is based on pixel fparts and is just a simple pattern.
   float scanline(vec2 fparts) {
     // Remember, + is up and right.
@@ -239,8 +242,14 @@ const fragFullscreenScanlineFbo = glsl`
     }
     average /= float(samples);
     
+    // What color would we be with no filter?
+    vec4 unfiltered = texture2D(texture, uv);
+    
+    // And with the filter?
+    vec4 filtered = mix(vec4(0.0, 0.0, 0.0, 1.0), vec4(average, 1.0), scanline(fparts));
+    
     // Now apply the scanlines
-    gl_FragColor = mix(vec4(0.0, 0.0, 0.0, 1.0), vec4(average, 1.0), scanline(fparts));
+    gl_FragColor = mix(filtered, unfiltered, (cos(time * PI / 10.0) + 1.0) / 2.0);
   }
 `
 
@@ -399,10 +408,11 @@ const drawFboProcessed = regl({
   uniforms: {
     // And we draw the buffer as a full-screen texture.
     texture: fbo,
-    scanres: ({viewportWidth, viewportHeight, tick}) => {
-      let pixelSize = 3 * (Math.cos(tick/100) + 1)
-      return [viewportWidth / Math.min(Math.max(pixelSize, 1.0), 5.0), viewportHeight / Math.min(Math.max(pixelSize, 1.0), 5.0)]
-    }
+    scanres: ({viewportWidth, viewportHeight}) => {
+      let pixelSize = 5
+      return [viewportWidth / pixelSize, viewportHeight / pixelSize]
+    },
+    time: () => { return now() }
   },
   depth: { enable: false }
 })
