@@ -213,8 +213,6 @@ const fragFullscreenScanlineFbo = glsl`
   }
   
   void main () {
-    //gl_FragColor = mix(vec4(0.0, 0.0, 0.0, 1.0), vec4(texture2D(texture, uv).xyz, 1.0), scanline(vec2(gl_FragCoord.x, gl_FragCoord.y)));
-    
     // We need to scale the 0-1 UV coordinate space up to fake pixel value in a pixel space of this size.
     vec2 scale = scanres;
     vec2 pixel = vec2(scale.x * uv.x, scale.y * uv.y);
@@ -246,10 +244,11 @@ const fragFullscreenScanlineFbo = glsl`
     vec4 unfiltered = texture2D(texture, uv);
     
     // And with the filter?
-    vec4 filtered = mix(vec4(0.0, 0.0, 0.0, 1.0), vec4(average, 1.0), scanline(fparts));
+    // Make sure to give it a bit of lightness to prevent overall darkening and give it an old CRT color
+    vec4 filtered = mix(vec4(0.0, 0.0, 0.0, 1.0), vec4(average, 1.0), scanline(fparts)) * 0.7 + vec4(0.29, 0.3, 0.29, 0.3);
     
     // Now apply the scanlines
-    gl_FragColor = mix(filtered, unfiltered, (cos(time * PI / 10.0) + 1.0) / 2.0);
+    gl_FragColor = mix(unfiltered, filtered, ((cos(time * PI / 10.0) + 1.0) / 2.0 * 0.9) + 0.1);
   }
 `
 
