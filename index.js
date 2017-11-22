@@ -22,11 +22,12 @@ const fragRainbow = glsl`
   uniform vec4 color;
   
   void main () {
-    gl_FragColor = vec4(
+    vec3 color = vec3(
       noise(vec2(gl_FragCoord.x * 0.01, gl_FragCoord.y * 0.01)) * 0.5 + 0.5,
       noise(vec2(gl_FragCoord.y * 0.01, gl_FragCoord.x * 0.01)) * 0.5 + 0.5,
-      noise(vec2(10.0 + gl_FragCoord.x * 0.01, 10.0 + gl_FragCoord.y * 0.01)) * 0.5 + 0.5,
-      1);
+      noise(vec2(10.0 + gl_FragCoord.x * 0.01, 10.0 + gl_FragCoord.y * 0.01)) * 0.5 + 0.5);
+    color /= length(color);
+    gl_FragColor = vec4(color, 1);
   }
 `
 
@@ -530,7 +531,7 @@ function createText(string) {
       model: () => {
         const t = 0.05 * now()
         
-        var modelMat = mat4.rotateY([], mat4.scale([], mat4.translate([], mat4.identity([]), [25, 10, 25]), [3, 3, 3]), Math.PI / 2)
+        var modelMat = mat4.rotateY([], mat4.scale([], mat4.translate([], mat4.identity([]), [25, 7, 25]), [4, 4, 4]), Math.PI / 2)
         
         // Work out rotation to use to make the text always face not backward
         if ((t + Math.PI / 2) % (2 * Math.PI) > Math.PI) {
@@ -568,7 +569,7 @@ function createText(string) {
 }
 
 // Only certain messages want to draw for some reason.
-const drawText = createText("Reticulating Splines...")
+const drawText = createText("Reticulating Splines")
 
 // Create a frame buffer to postprocess later. See <https://github.com/regl-project/regl/blob/gh-pages/example/blur.js>
 const fbo = regl.framebuffer({
