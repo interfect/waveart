@@ -7,6 +7,7 @@ const mat4 = require('gl-mat4')
 const grid = require('grid-mesh')
 const wireframe = require('screen-projected-lines')
 const rng = require('random-seed').create()
+const vectorizeText = require('vectorize-text')
 
 // Define shome shaders
 
@@ -60,6 +61,42 @@ precision mediump float;
 
 `
 
+// This shader does substack's screen-projected-lines wireframe only
+const vertWireframe = glsl`
+  precision mediump float;
+  
+  #pragma glslify: linevoffset = require('screen-projected-lines')
+  
+  // Camera stuff
+  uniform mat4 proj;
+  uniform mat4 model;
+  uniform mat4 view;
+  
+  // We need the screen aspect ratio
+  uniform float aspect;
+  
+  // How thick are the lines
+  uniform float thickness;
+  
+  attribute vec3 position;
+  
+  // We also need the position of the "next" vertex to draw a line to
+  attribute vec3 nextpos;
+  
+  // And a float describing the direction to it (?)
+  attribute float direction;
+  
+  void main () {
+    mat4 proj_combined = proj * view * model;
+    vec4 p = proj_combined * vec4(position, 1);
+    vec4 n = proj_combined * vec4(nextpos, 1);
+    vec4 offset = linevoffset(p, n, direction, aspect);
+    // Just do normal wireframe
+    gl_Position = p + offset * thickness;
+    
+  }
+`
+
 // This shader does substack's screen-projected-lines wireframe but also waves
 const vertWireframeWave = glsl`
   precision mediump float;
@@ -86,6 +123,9 @@ const vertWireframeWave = glsl`
   
   // And a float describing the direction to it (?)
   attribute float direction;
+  
+  // How thick are the lines
+  uniform float thickness;
   
   // And we account for time
   uniform float time;
@@ -143,7 +183,7 @@ const vertWireframeWave = glsl`
     vec4 n = proj_combined * vec4(wavify(nextpos, time), 1);
     vec4 offset = linevoffset(p, n, direction, aspect);
     // Just do normal wireframe
-    gl_Position = p + offset * 0.02;
+    gl_Position = p + offset * thickness;
     
   }
 `
@@ -369,6 +409,7 @@ function createOcean(size) {
     elements: mesh.cells,
     uniforms: {
       color: [0, 0.7, 0.8, 1],
+      thickness: 0.02,
       time: () => { return now() },
       // Use a matrix stack ripped from the documentation.
       // This is how we stick the image into our window as a function of window size.
@@ -433,6 +474,93 @@ function createOcean(size) {
 
 // Create the ocean drawing function
 const drawOcean = createOcean(50);
+
+// Define a way to make text. Can only do outlines because trying to do
+// triangles upsets the browser with some generated JS conde or something.
+function createText(string) {
+
+  let mesh = vectorizeText(string, {
+    textAlign: 'center',
+    textBaseline: 'middle'
+  })
+  
+  // Convert mesh from 2d to 3d
+  mesh.positions = mesh.positions.map((vec2) => {
+    // Put the mesh in the XY plane; +Y is up.
+    return [vec2[0], -vec2[1], 0]
+  })
+  
+  // Wireframe it for screen-projected-lines
+  mesh = wireframe(mesh)
+
+  let options = {
+    frag: fragRainbow,
+    vert: vertWireframe,
+
+    attributes: {
+      position: mesh.positions,
+      nextpos: mesh.nextPositions,
+      direction: mesh.directions
+    },
+
+    elements: mesh.cells,
+
+    uniforms: {
+      color: [1, 1, 1, 1],
+      thickness: 0.07,
+      // TODO: we duplicate this matrix code, mostly
+      // Use a matrix stack ripped from the documentation.
+      // This is how we stick the image into our window as a function of window size.
+      proj: ({viewportWidth, viewportHeight}) =>
+        mat4.perspective([],
+          Math.PI / 2,
+          viewportWidth / viewportHeight,
+          0.01,
+          1000),
+      // The model is at the center of the scene, which is not the origin. Also
+      // move it up, scale it up, and rotate it to face the camera initially and
+      // never be mirrored.
+      model: ({tick}) => {
+        const t = 0.001 * tick
+        
+        var modelMat = mat4.rotateY([], mat4.scale([], mat4.translate([], mat4.identity([]), [25, 10, 25]), [5, 5, 5]), Math.PI / 2)
+        
+        // Work out rotation to use to make the text always face not backward
+        if ((t + Math.PI / 2) % (2 * Math.PI) > Math.PI) {
+          // We arebetween 1/4 and 3/4 through the spin
+          // We need to flip around to face the camera
+          modelMat = mat4.rotateY([], modelMat, Math.PI)
+        }
+        return modelMat
+        
+      },
+      // This is the camera matrix. It's the spinny one from the documentation, modified to spin gooder
+      // Also modified to fake text spin so we can always read it
+      view: ({tick}) => {
+        const t = 0.001 * tick
+        const radius = 25
+        const height = 5
+        const center = [25, 0, 25]
+        return mat4.lookAt([],
+          // Here is our eye
+          [center[0] + radius * Math.cos(t), center[1] + height, center[2] + radius * Math.sin(t)],
+          // Here is where we look
+          center,
+          // This is up
+          [0, 1, 0])
+      },
+      // We alsop need the aspect ratio for screen-projected-lines
+      aspect: ({viewportWidth, viewportHeight}) => {
+        return viewportWidth / viewportHeight
+      }
+    },
+    depth: {enable: false}
+  }
+  
+  return regl(options)
+}
+
+const drawText = createText("Making Waves")
 
 // Create a frame buffer to postprocess later. See <https://github.com/regl-project/regl/blob/gh-pages/example/blur.js>
 const fbo = regl.framebuffer({
@@ -508,6 +636,9 @@ regl.frame(({viewportWidth, viewportHeight}) => {
 
     // Draw the ocean every frame
     drawOcean()
+    
+    // And the text
+    drawText()
   })
   
   // Clear the actual screen
