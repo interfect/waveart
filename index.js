@@ -329,12 +329,19 @@ const fragFullscreenScanlineFbo = glsl`
     }
     average /= float(samples);
     
+    // Quantize the average color to a few bits
+    // See https://gamedev.stackexchange.com/a/119825/14376
+    // This is 8 levels (3 bits) for R and G and 4 levels (2 bits) for B
+    // So, beautiful 256-color graphics!
+    vec3 shades_per_channel = vec3(8, 8, 4);
+    vec3 quantized = min(floor(average * (shades_per_channel - 1.0) + 0.5) / (shades_per_channel - 1.0), 1.0);
+    
     // What color would we be with no filter?
     vec4 unfiltered = texture2D(texture, uv);
     
     // And with the filter?
     // Make sure to give it a bit of lightness to prevent overall darkening and give it an old CRT color
-    vec4 filtered = mix(vec4(0.0, 0.0, 0.0, 1.0), vec4(average, 1.0), scanline(fparts)) * 0.7 + vec4(0.29, 0.3, 0.29, 0.3);
+    vec4 filtered = mix(vec4(0.0, 0.0, 0.0, 1.0), vec4(quantized, 1.0), scanline(fparts)) * 0.7 + vec4(0.29, 0.3, 0.29, 0.3);
     
     // We will mix with the wavelets/2d waves
     float mixing1 = clamp(sumwaves(uv, time) / 2.0, -0.5, 0.5) + 0.5;
