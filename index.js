@@ -171,6 +171,9 @@ const fragFullscreenScanlineFbo = glsl`
   // What even is pi?
   #define PI 3.1415926535897932384626433832795
   
+  // How many waves in each axis do we support?
+  #define MAX_WAVES 8
+  
   // We get the UV from the vertex shader
   varying vec2 uv;
   
@@ -182,6 +185,52 @@ const fragFullscreenScanlineFbo = glsl`
   
   // And we account for time and fade in and out
   uniform float time;
+  
+  // We take some uniform amplitude, space frequency, time frequency, phase parameters
+  // Waves that aren't used are all 0.
+  uniform vec4 xwaves[MAX_WAVES];
+  uniform vec4 ywaves[MAX_WAVES];
+  
+  // We also have wavelet parameters (bounds in space (x, y) and bounds in time
+  // (z, w)) we can use with a cosine envelope to make local things. We use a
+  // sin envelope. Zeros disable.
+  uniform vec4 xwavelets[MAX_WAVES];
+  uniform vec4 ywavelets[MAX_WAVES];
+  
+  // We have a function to compute a single wave
+  float wave(in vec4 params, in float pos, in float t) {
+    return params.x * cos(params.y * pos + params.z * t + params.w);
+  }
+  
+  // We have a single envelope.
+  float envelope(in float start, in float end, in float pos) {
+    if (start == 0.0 && end == 0.0) {
+      // Deactivated
+      return 1.0;
+    } else if(pos < start || pos > end) {
+      // Out of bounds
+      return 0.0;
+    } else {
+      return sin((pos - start) / (end - start) * PI);
+    }
+  }
+  
+  // We apply this envelope to the wave, doing the two enevlopes in 2d as per the parameters.
+  float wavelet_envelope(in vec4 params, in float pos, in float t) {
+    return envelope(params.x, params.y, pos) * envelope(params.z, params.w, t);
+  }
+  
+  // Now we have something to sum up the waves
+  float sumwaves(in vec2 pos, in float t) {
+    float result = 0.0;
+    for (int i = 0; i < MAX_WAVES; i++) {
+      result += wave(xwaves[i], pos.x, t) * wavelet_envelope(xwavelets[i], pos.x, t);
+    }
+    for (int i = 0; i < MAX_WAVES; i++) {
+      result += wave(ywaves[i], pos.y, t) * wavelet_envelope(ywavelets[i], pos.y, t);
+    }
+    return result;
+  }
   
   // Scanline function is based on pixel fparts and is just a simple pattern.
   float scanline(vec2 fparts) {
@@ -247,8 +296,13 @@ const fragFullscreenScanlineFbo = glsl`
     // Make sure to give it a bit of lightness to prevent overall darkening and give it an old CRT color
     vec4 filtered = mix(vec4(0.0, 0.0, 0.0, 1.0), vec4(average, 1.0), scanline(fparts)) * 0.7 + vec4(0.29, 0.3, 0.29, 0.3);
     
+    // We will mix with the wavelets/2d waves
+    float mixing1 = clamp(sumwaves(uv, time) / 2.0, -0.5, 0.5) + 0.5;
+    // And also with a global fade in and out
+    float mixing2 = 0.8 * (cos(time * PI / 10.0) + 1.0) / 2.0;
+    
     // Now apply the scanlines
-    gl_FragColor = mix(unfiltered, filtered, ((cos(time * PI / 10.0) + 1.0) / 2.0 * 0.9) + 0.1);
+    gl_FragColor = mix(unfiltered, filtered, clamp(mixing1 + mixing2, 0.0, 1.0));
   }
 `
 
@@ -364,9 +418,10 @@ function createOcean(size) {
   
   for (let i = 0; i < MAX_WAVES; i++) {
     // Create random wave uniforms
+    // Amplitude, space frequency, time frequency, phase parameters
     options.uniforms['xwaves[' + i + ']'] = [rand(0, 0.5), rand(0.3, 0.6), rand(0.5, 1.0), rand(0, 1)]
     options.uniforms['zwaves[' + i + ']'] = [rand(0, 0.5), rand(0.3, 0.6), rand(0.5, 1.0), rand(0, 1)]
-    // Add random bounds
+    // Add random bounds in space but not ime bounds.
     options.uniforms['xwavelets[' + i + ']'] = [rand(0, 5), rand(45, 50), 0, 0]
     options.uniforms['zwavelets[' + i + ']'] = [rand(0, 5), rand(45, 50), 0, 0]
   }
@@ -394,27 +449,50 @@ const withFbo = regl({
   framebuffer: fbo
 })
 
-const drawFboProcessed = regl({
-  frag: fragFullscreenScanlineFbo,
-  vert: vertFullscreenFbo,
-  // We just draw a big triangle so we get to cover the whole screen.
-  attributes: {
-    position: [ -4, -4,
-                 4, -4,
-                 0,  4 ]
-  },
-  count: 3,
-  uniforms: {
-    // And we draw the buffer as a full-screen texture.
-    texture: fbo,
-    scanres: ({viewportWidth, viewportHeight}) => {
-      let pixelSize = 5
-      return [viewportWidth / pixelSize, viewportHeight / pixelSize]
+function makeProcessor() {
+
+  // How many waves does the shader allow?
+  // Now we use them for mixing the filter in and out
+  const MAX_WAVES = 8;
+
+  let options = {
+    frag: fragFullscreenScanlineFbo,
+    vert: vertFullscreenFbo,
+    // We just draw a big triangle so we get to cover the whole screen.
+    attributes: {
+      position: [ -4, -4,
+                   4, -4,
+                   0,  4 ]
     },
-    time: () => { return now() }
-  },
-  depth: { enable: false }
-})
+    count: 3,
+    uniforms: {
+      // And we draw the buffer as a full-screen texture.
+      texture: fbo,
+      scanres: ({viewportWidth, viewportHeight}) => {
+        let pixelSize = 5
+        return [viewportWidth / pixelSize, viewportHeight / pixelSize]
+      },
+      time: () => { return now() }
+    },
+    depth: { enable: false }
+  }
+
+  // Add waves here too
+  for (let i = 0; i < MAX_WAVES; i++) {
+    // Create random wave uniforms
+    // Amplitude, space frequency, time frequency, phase parameters
+    options.uniforms['xwaves[' + i + ']'] = [rand(0.5, 1.0), rand(7, 14), rand(-0.5, 0.5), rand(0, 1)]
+    options.uniforms['ywaves[' + i + ']'] = [rand(0.5, 1.0), rand(3, 4), rand(-0.5, 0.5), rand(0, 1)]
+    // Add random bounds
+    options.uniforms['xwavelets[' + i + ']'] = [rand(0, 0.3), rand(0.7, 1.0), 0, 0]
+    options.uniforms['ywavelets[' + i + ']'] = [rand(0, 0.3), rand(0.7, 1.0), 0, 0]
+  }
+  
+  return regl(options)
+  
+}
+
+let drawFboProcessed = makeProcessor()
 
 regl.frame(({viewportWidth, viewportHeight}) => {
   // Make the frame buffer the right size
