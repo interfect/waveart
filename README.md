@@ -15,7 +15,8 @@ sudo npm install -g browserify
 Than you can clone the rep and:
 
 ```
-npm install
+# Omit CXX=clang if you aren't on OS X
+CXX=clang npm install
 npm run build
 ```
 
@@ -31,4 +32,12 @@ npm run watch
 ```
 
 Then edit and refresh.
+
+## Rendering text
+
+`vectorize-text` misbehaves in a variety of browsers, so we pre-vectorize the text we want to display using a script, `render-text.js`. This needs Cairo installed, which on OS X can be accomplished with:
+
+```
+sudo port install cairo
+```
 
