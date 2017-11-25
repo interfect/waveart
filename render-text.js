@@ -5,12 +5,14 @@ const vectorizeText = require('vectorize-text')
 const fs = require('fs')
 
 // Get a canvas context
-const scratch = new Canvas(200, 200)
+// Canvas must be big enough to display the string you are trying to vectorize!
+const scratch = new Canvas(1000, 1000)
 const ctx = scratch.getContext('2d')
 
 let mesh = vectorizeText('Reticulating Splines', {
   textAlign: 'center',
   textBaseline: 'middle',
+  font: 'Times New Roman',
   canvas: scratch,
   context: ctx
 })

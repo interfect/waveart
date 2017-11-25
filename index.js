@@ -7,7 +7,7 @@ const mat4 = require('gl-mat4')
 const grid = require('grid-mesh')
 const wireframe = require('screen-projected-lines')
 const rng = require('random-seed').create()
-const vectorizeText = require('vectorize-text')
+const TEXT_VECTOR_DATA = require('./text.json')
 
 // Define shome shaders
 
@@ -483,15 +483,13 @@ function createOcean(size) {
 // Create the ocean drawing function
 const drawOcean = createOcean(50);
 
-// Define a way to make text. Can only do outlines because trying to do
-// triangles upsets the browser with some generated JS conde or something.
-function createText(string) {
+// Define a way to make text. Needs text mesh data pre-vectorized from
+// render-text.js.
+function createText(mesh_data) { 
+    
+  // Duplicate the input mesh
+  let mesh = Object.assign({}, mesh_data)
 
-  let mesh = vectorizeText(string, {
-    textAlign: 'center',
-    textBaseline: 'middle'
-  })
-  
   // Convert mesh from 2d to 3d
   mesh.positions = mesh.positions.map((vec2) => {
     // Put the mesh in the XY plane; +Y is up.
@@ -569,7 +567,7 @@ function createText(string) {
 }
 
 // Only certain messages want to draw for some reason.
-const drawText = createText("Reticulating Splines")
+const drawText = createText(TEXT_VECTOR_DATA)
 
 // Create a frame buffer to postprocess later. See <https://github.com/regl-project/regl/blob/gh-pages/example/blur.js>
 const fbo = regl.framebuffer({
